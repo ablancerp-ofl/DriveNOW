@@ -1,0 +1,167 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: drivenow-postgres
+    environment:
+      POSTGRES_USER: drivenow_user
+      POSTGRES_PASSWORD: drivenow_pass
+      POSTGRES_DB: drivenow_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - drivenow-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drivenow_user -d drivenow_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: drivenow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - drivenow-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ../services/auth-service
+      dockerfile: Dockerfile
+    container_name: drivenow-auth-service
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://drivenow_user:drivenow_pass@postgres:5432/drivenow_db
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - drivenow-network
+    restart: unless-stopped
+
+  # Booking Service
+  booking-service:
+    build:
+      context: ../services/booking-service
+      dockerfile: Dockerfile
+    container_name: drivenow-booking-service
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      DATABASE_URL: postgresql://drivenow_user:drivenow_pass@postgres:5432/drivenow_db
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - drivenow-network
+    restart: unless-stopped
+
+  # Location Service
+  location-service:
+    build:
+      context: ../services/location-service
+      dockerfile: Dockerfile
+    container_name: drivenow-location-service
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3003:3003"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - drivenow-network
+    restart: unless-stopped
+
+  # Payment Service
+  payment-service:
+    build:
+      context: ../services/payment-service
+      dockerfile: Dockerfile
+    container_name: drivenow-payment-service
+    environment:
+      NODE_ENV: development
+      PORT: 3004
+      DATABASE_URL: postgresql://drivenow_user:drivenow_pass@postgres:5432/drivenow_db
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3004:3004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - drivenow-network
+    restart: unless-stopped
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ../services/notification-service
+      dockerfile: Dockerfile
+    container_name: drivenow-notification-service
+    environment:
+      NODE_ENV: development
+      PORT: 3005
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3005:3005"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - drivenow-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: drivenow-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth-service
+      - booking-service
+      - location-service
+      - payment-service
+    networks:
+      - drivenow-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  drivenow-network:
+    driver: bridge
