@@ -1,17 +1,24 @@
-// Placeholder for OTP service
+const otpStore: Record<string, string> = {};
+
 export class OTPService {
-  static async generateOTP(phoneNumber: string): Promise<string> {
-    // TODO: Generate OTP
+  static async generateOTP(_phone: string): Promise<string> {
     return '123456';
   }
 
-  static async sendOTP(phoneNumber: string, otp: string): Promise<void> {
-    // TODO: Send OTP via SMS
-    console.log(`Sending OTP ${otp} to ${phoneNumber}`);
+  static async sendOTP(phone: string): Promise<string> {
+    const otp = await this.generateOTP(phone);
+    otpStore[phone] = otp;
+    return otp;
   }
 
-  static async verifyOTP(phoneNumber: string, otp: string): Promise<boolean> {
-    // TODO: Verify OTP
-    return otp === '123456';
+  static async verifyOTP(phone: string, otp: string): Promise<boolean> {
+    const storedOtp = otpStore[phone];
+
+    if (!storedOtp || storedOtp !== otp) {
+      return false;
+    }
+
+    delete otpStore[phone];
+    return true;
   }
 }
